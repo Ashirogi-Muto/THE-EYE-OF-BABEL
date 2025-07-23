@@ -6,7 +6,8 @@ import os
 import text_detection
 import image_processing
 import translation
-import image_preprocessor # Import our new module
+# We no longer need the preprocessor for PaddleOCR
+# import image_preprocessor 
 from config import OUTPUT_FOLDER
 
 def process_image(image_path):
@@ -22,13 +23,12 @@ def process_image(image_path):
         print(f"Error loading image: {e}")
         return False
 
-    # --- Pre-processing Step ---
-    print("Pre-processing image for better OCR accuracy...")
-    ocr_image = image_preprocessor.preprocess_for_ocr(original_image)
-
     # --- Text Detection ---
+    # NOTE: We pass the original image to PaddleOCR. Pre-processing is not
+    # needed and can harm the accuracy of deep learning models.
     print("Detecting text...")
-    raw_text_data = text_detection.get_text_data(ocr_image)
+    raw_text_data = text_detection.get_text_data(original_image)
+    
     print("Grouping words into lines...")
     grouped_lines = text_detection.group_text_by_lines(raw_text_data)
     print(f"Found {len(grouped_lines)} lines to process.")
@@ -45,7 +45,7 @@ def process_image(image_path):
     # Create a copy of the original color image to draw on.
     processing_image = original_image.copy()
 
-    # --- NEW TWO-LOOP LOGIC ---
+    # --- TWO-LOOP LOGIC ---
     # Loop 1: Erase all text areas first to create a clean slate.
     print("Erasing original text...")
     for line in grouped_lines:

@@ -5,8 +5,8 @@ An advanced Python application that performs in-place translation of text on ima
 ## Features
 - **Folder Watching:** Automatically processes new images dropped into an `input_images` folder.
 - **Modular Codebase:** Organized into separate modules for configuration, text detection, image processing, and translation.
-- **Advanced OCR:** Uses Tesseract for text detection.
-- **Inpainting:** Intelligently erases original text from the image.
+- **Advanced OCR:** Uses PaddleOCR for robust multilingual text detection.
+- **Inpainting:** Intelligently erases original text from the image by filling the area with the surrounding color.
 - **In-Place Translation:** Draws the translated text back onto the image.
 
 ## How to Use

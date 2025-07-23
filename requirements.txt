@@ -1,4 +1,4 @@
 opencv-python
-pytesseract
-pandas
 deep-translator
+paddlepaddle
+paddleocr>=2.0.1

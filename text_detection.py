@@ -1,76 +1,63 @@
 # text_detection.py
 # This module is responsible for detecting text and its properties in an image.
 
-import pytesseract
-import pandas as pd
-from config import TESSERACT_PATH
+import numpy as np
+import cv2
+from paddleocr import PaddleOCR
 
-# Configure pytesseract
-pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+# --- Model Initialization ---
+# This loads the PaddleOCR model into memory.
+# It's done once when the module is first imported for efficiency.
+# The first time this runs, it will download the necessary model weights.
+# We use lang='ch' to load the robust multilingual model which supports
+# Chinese, English, and many other languages.
+print("Loading multilingual PaddleOCR model... (This may take a moment on first run)")
+ocr_model = PaddleOCR(use_angle_cls=True, lang='ch')
+print("PaddleOCR model loaded.")
+
 
 def get_text_data(image):
-    """
-    Performs OCR on an image and returns detailed data about each detected word.
-    This is our low-level function that gets raw data from Tesseract.
+    """Performs OCR and returns the raw result list."""
+    result = ocr_model.ocr(image)
+    return result
 
-    Args:
-        image: An OpenCV image object (as a NumPy array).
 
-    Returns:
-        pandas.DataFrame: A DataFrame containing data for each word, including
-                          its bounding box, confidence, and text.
-    """
-    # Use image_to_data to get detailed information including bounding boxes
-    data = pytesseract.image_to_data(image, output_type=pytesseract.Output.DICT)
-    
-    df = pd.DataFrame(data)
-    
-    # Filter out entries with no text or low confidence
-    df = df[df.conf != -1]
-    df = df.dropna(subset=['text'])
-    df = df[df.text.str.strip() != '']
+def group_text_by_lines(ocr_result):
+    """Takes the raw PaddleOCR result and formats it for our application."""
+    # Check for empty or invalid results
+    if not ocr_result or not ocr_result[0]:
+        return []
 
-    return df
-
-def group_text_by_lines(df):
-    """
-    Takes the raw word data and groups it into lines of text.
-    This is our high-level function that makes the data more useful.
-
-    Args:
-        df (pandas.DataFrame): The DataFrame from get_text_data.
-
-    Returns:
-        list: A list of dictionaries, where each dictionary represents a line of text
-              and contains the full text and a single bounding box for the entire line.
-    """
-    # Group the DataFrame by block, paragraph, and line number. This effectively
-    # groups all words that belong on the same line.
-    line_groups = df.groupby(['block_num', 'par_num', 'line_num'])
+    # The result for a single image is a list containing one item.
+    result_page = ocr_result[0]
+    if not result_page:
+        return []
 
     grouped_data = []
-    for name, group in line_groups:
-        # For each line group, combine the text of all words into a single string.
-        line_text = ' '.join(group['text'].astype(str))
+    
+    # Handle the dictionary-based format from newer PaddleOCR versions
+    if isinstance(result_page, dict):
+        try:
+            boxes = result_page.get('rec_polys', [])
+            texts = result_page.get('rec_texts', [])
+            for box, text in zip(boxes, texts):
+                points = np.array(box, dtype=np.int32)
+                x, y, w, h = cv2.boundingRect(points)
+                grouped_data.append({'text': text, 'box': (x, y, w, h)})
+            return grouped_data
+        except Exception as e:
+            print(f"Error parsing PaddleOCR dictionary result: {e}")
+            return []
+    
+    # Handle the standard list-of-lists format as a fallback for older versions
+    try:
+        for line in result_page:
+            points = np.array(line[0], dtype=np.int32)
+            x, y, w, h = cv2.boundingRect(points)
+            text, confidence = line[1]
+            grouped_data.append({'text': text, 'box': (x, y, w, h)})
+    except Exception as e:
+        print(f"Error parsing PaddleOCR list result: {e}")
+        return []
 
-        # Now, calculate a single bounding box for the entire line.
-        # x_min is the smallest 'left' value in the group.
-        x_min = group['left'].min()
-        # y_min is the smallest 'top' value in the group.
-        y_min = group['top'].min()
-        # To get the rightmost edge, we find the max of (left + width).
-        x_max = (group['left'] + group['width']).max()
-        # To get the bottommost edge, we find the max of (top + height).
-        y_max = (group['top'] + group['height']).max()
-
-        # Calculate the overall width and height of the line's bounding box.
-        line_width = x_max - x_min
-        line_height = y_max - y_min
-
-        # Store the consolidated data for this line.
-        grouped_data.append({
-            'text': line_text,
-            'box': (x_min, y_min, line_width, line_height)
-        })
-        
     return grouped_data
